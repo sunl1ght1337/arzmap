@@ -78,9 +78,19 @@ function normalizeData(raw) {
         : Object.values(housesObj).flat();
 
     const bizObj = data?.businesses ?? data?.Businesses ?? data?.business ?? data?.bizs ?? {};
-    const rawBiz = Array.isArray(bizObj)
-        ? bizObj
-        : Object.values(bizObj).flat();
+    let rawBiz;
+    if (Array.isArray(bizObj)) {
+        rawBiz = bizObj;
+    } else if (bizObj.noAuction !== undefined || bizObj.onAuction !== undefined) {
+        // { onAuction: [...], noAuction: { "0": [...], "1": [...], ... } }
+        const onAuction = Array.isArray(bizObj.onAuction) ? bizObj.onAuction : [];
+        const noAuction = bizObj.noAuction && !Array.isArray(bizObj.noAuction)
+            ? Object.values(bizObj.noAuction).flat()
+            : (Array.isArray(bizObj.noAuction) ? bizObj.noAuction : []);
+        rawBiz = [...onAuction, ...noAuction];
+    } else {
+        rawBiz = Object.values(bizObj).flat();
+    }
 
     const houses = rawHouses.map(h => ({
         id:       (h.id ?? h.ID ?? h.houseId ?? null) !== null ? (h.id ?? h.ID ?? h.houseId) - 1 : null,

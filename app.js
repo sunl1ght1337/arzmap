@@ -70,27 +70,18 @@ function normalizeOwner(raw) {
 function normalizeData(raw) {
     const data = raw?.data ?? raw;
 
-    // API returns { houses: { hasOwner: [...], noOwner: [...], hasAuction: [...] } }
-    // Flatten all sub-arrays into one list
-    const housesObj = data?.houses ?? data?.Houses ?? {};
-    const rawHouses = Array.isArray(housesObj)
-        ? housesObj
-        : Object.values(housesObj).flat();
-
-    const bizObj = data?.businesses ?? data?.Businesses ?? data?.business ?? data?.bizs ?? {};
-    let rawBiz;
-    if (Array.isArray(bizObj)) {
-        rawBiz = bizObj;
-    } else if (bizObj.noAuction !== undefined || bizObj.onAuction !== undefined) {
-        // { onAuction: [...], noAuction: { "0": [...], "1": [...], ... } }
-        const onAuction = Array.isArray(bizObj.onAuction) ? bizObj.onAuction : [];
-        const noAuction = bizObj.noAuction && !Array.isArray(bizObj.noAuction)
-            ? Object.values(bizObj.noAuction).flat()
-            : (Array.isArray(bizObj.noAuction) ? bizObj.noAuction : []);
-        rawBiz = [...onAuction, ...noAuction];
-    } else {
-        rawBiz = Object.values(bizObj).flat();
+    // Recursively extract all items (objects with "id" field) from any nesting
+    function extractItems(obj) {
+        if (Array.isArray(obj)) return obj.flatMap(extractItems);
+        if (obj && typeof obj === 'object') {
+            if ('id' in obj) return [obj];
+            return Object.values(obj).flatMap(extractItems);
+        }
+        return [];
     }
+
+    const rawHouses = extractItems(data?.houses ?? data?.Houses ?? {});
+    const rawBiz    = extractItems(data?.businesses ?? data?.Businesses ?? data?.business ?? data?.bizs ?? {});
 
     const houses = rawHouses.map(h => ({
         id:       (h.id ?? h.ID ?? h.houseId ?? null) !== null ? (h.id ?? h.ID ?? h.houseId) - 1 : null,

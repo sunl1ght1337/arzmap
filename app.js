@@ -45,7 +45,7 @@ function buildServerSelect() {
 // API
 // ---------------------------------------------------------------------------
 async function fetchMap(serverId) {
-    const url = `https://n-api.arizona-rp.com/api/map/${serverId}`;
+    const url = `https://steep-voice-b8d7.arzmap-74f.workers.dev/api/map/${serverId}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP_${res.status}`);
     return res.json();

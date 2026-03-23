@@ -68,40 +68,37 @@ function normalizeOwner(raw) {
  * Handles multiple possible field-name conventions.
  */
 function normalizeData(raw) {
-    // Support both flat and nested shapes
     const data = raw?.data ?? raw;
 
-    const rawHouses =
-        data?.houses ??
-        data?.Houses ??
-        data?.house ??
-        [];
+    // API returns { houses: { hasOwner: [...], noOwner: [...], hasAuction: [...] } }
+    // Flatten all sub-arrays into one list
+    const housesObj = data?.houses ?? data?.Houses ?? {};
+    const rawHouses = Array.isArray(housesObj)
+        ? housesObj
+        : Object.values(housesObj).flat();
 
-    const rawBiz =
-        data?.businesses ??
-        data?.Businesses ??
-        data?.business ??
-        data?.bizs ??
-        [];
+    const bizObj = data?.businesses ?? data?.Businesses ?? data?.business ?? data?.bizs ?? {};
+    const rawBiz = Array.isArray(bizObj)
+        ? bizObj
+        : Object.values(bizObj).flat();
 
     const houses = rawHouses.map(h => ({
-        id:       h.id       ?? h.ID       ?? h.houseId    ?? null,
+        id:       (h.id ?? h.ID ?? h.houseId ?? null) !== null ? (h.id ?? h.ID ?? h.houseId) - 1 : null,
         owner:    normalizeOwner(h.owner   ?? h.Owner      ?? h.ownerName ?? h.owner_name),
         name:     String(h.name     ?? h.Name     ?? h.houseName  ?? h.house_name ?? '').trim(),
         price:    h.price    ?? h.Price    ?? null,
         interior: h.interior ?? h.Interior ?? null,
-        x: h.x ?? null,
-        y: h.y ?? null,
-        z: h.z ?? null,
+        hasAuction: h.hasAuction ?? 0,
+        x: h.lx ?? h.x ?? null,
+        y: h.ly ?? h.y ?? null,
     }));
 
     const businesses = rawBiz.map(b => ({
-        id:    b.id    ?? b.ID    ?? b.businessId   ?? null,
+        id:    (b.id ?? b.ID ?? b.businessId ?? null) !== null ? (b.id ?? b.ID ?? b.businessId) - 1 : null,
         owner: normalizeOwner(b.owner ?? b.Owner    ?? b.ownerName  ?? b.owner_name),
         name:  String(b.name  ?? b.Name  ?? b.businessName ?? b.business_name ?? '').trim(),
-        x: b.x ?? null,
-        y: b.y ?? null,
-        z: b.z ?? null,
+        x: b.lx ?? b.x ?? null,
+        y: b.ly ?? b.y ?? null,
     }));
 
     return { houses, businesses };
@@ -112,7 +109,7 @@ function normalizeData(raw) {
 // ---------------------------------------------------------------------------
 
 /**
- * Build a map  owner → { houseIds, houseCount, businessIds, businessCount }
+ * Build a map owner → { houseIds, houseCount, businessIds, businessCount }
  * Computed once after load; reused for all filter operations.
  */
 function buildOwnerStats(houses, businesses) {

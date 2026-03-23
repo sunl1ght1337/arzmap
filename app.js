@@ -197,14 +197,25 @@ function applyFilters(houses, ownerStats, filters) {
     });
 }
 
-/** Attach owner stats fields to each house row (for table display / CSV) */
+/** Attach owner stats fields to each house row (for table display / CSV).
+ *  houseCount/houseIds reflect only the houses present in the filtered list.
+ *  businessCount/businessIds reflect total on the server (ownerStats). */
 function enrichResults(houses, ownerStats) {
+    // Build house counts scoped to the current filtered list
+    const rangeIds   = {};
+    for (const h of houses) {
+        if (!h.owner) continue;
+        if (!rangeIds[h.owner]) rangeIds[h.owner] = [];
+        rangeIds[h.owner].push(h.id);
+    }
+
     return houses.map(h => {
         const s = h.owner ? (ownerStats[h.owner] ?? null) : null;
+        const ids = h.owner ? (rangeIds[h.owner] ?? []) : [];
         return {
             ...h,
-            houseCount:    s ? s.houseCount    : 0,
-            houseIds:      s ? s.houseIds      : [],
+            houseCount:    ids.length,
+            houseIds:      ids,
             businessCount: s ? s.businessCount : 0,
             businessIds:   s ? s.businessIds   : [],
         };

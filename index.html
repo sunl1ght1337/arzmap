@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arizona RP — Владельцы домов</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="site-header">
+            <h1>Arizona RP <span class="accent">— Владельцы домов</span></h1>
+        </header>
+
+        <!-- Block 1: Server loading -->
+        <section class="block" id="block-load">
+            <h2 class="block-title">Загрузка данных</h2>
+            <div class="load-row">
+                <label for="server-select">Сервер:</label>
+                <select id="server-select"></select>
+                <button id="btn-load" class="btn-primary">Загрузить</button>
+            </div>
+            <div id="status" class="status hidden"></div>
+        </section>
+
+        <!-- Block 2: Filters -->
+        <section class="block" id="block-filters">
+            <h2 class="block-title">Фильтры</h2>
+            <div class="filters-grid">
+                <div class="filter-group">
+                    <label class="filter-label">Диапазон ID домов</label>
+                    <div class="input-row">
+                        <input type="number" id="filter-from-id" placeholder="От" min="1">
+                        <span class="separator">—</span>
+                        <input type="number" id="filter-to-id" placeholder="До" min="1">
+                    </div>
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label">Владелец</label>
+                    <select id="filter-owner">
+                        <option value="all">Все дома</option>
+                        <option value="with">Только с владельцем</option>
+                        <option value="without">Только без владельца</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label">Домов у владельца</label>
+                    <div class="input-row">
+                        <input type="number" id="filter-min-houses" placeholder="Мин" min="0">
+                        <span class="separator">—</span>
+                        <input type="number" id="filter-max-houses" placeholder="Макс" min="0">
+                    </div>
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label">Бизнесов у владельца</label>
+                    <div class="input-row">
+                        <input type="number" id="filter-min-biz" placeholder="Мин" min="0">
+                        <span class="separator">—</span>
+                        <input type="number" id="filter-max-biz" placeholder="Макс" min="0">
+                    </div>
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label">Поиск по нику</label>
+                    <input type="text" id="filter-nick" placeholder="Часть ника владельца">
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label">Сортировка</label>
+                    <div class="input-row">
+                        <select id="sort-field">
+                            <option value="id">По ID дома</option>
+                            <option value="owner">По нику</option>
+                            <option value="houseCount">По кол-ву домов</option>
+                            <option value="businessCount">По кол-ву бизнесов</option>
+                        </select>
+                        <select id="sort-dir">
+                            <option value="asc">↑ Возр.</option>
+                            <option value="desc">↓ Убыв.</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="filter-actions">
+                <button id="btn-apply" class="btn-primary">Применить</button>
+                <button id="btn-reset" class="btn-secondary">Сбросить</button>
+            </div>
+        </section>
+
+        <!-- Block 3: Summary -->
+        <section class="block" id="block-summary">
+            <h2 class="block-title">Итоги</h2>
+            <div class="summary-grid">
+                <div class="summary-item">
+                    <span class="summary-label">Домов загружено</span>
+                    <span class="summary-value" id="stat-total-houses">—</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Бизнесов загружено</span>
+                    <span class="summary-value" id="stat-total-biz">—</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Результатов найдено</span>
+                    <span class="summary-value" id="stat-results">—</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Уникальных владельцев</span>
+                    <span class="summary-value" id="stat-owners">—</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Block 4: Table -->
+        <section class="block" id="block-table">
+            <h2 class="block-title">Результаты</h2>
+            <div id="table-wrapper">
+                <div id="table-container">
+                    <p class="placeholder">Загрузите данные сервера для отображения результатов.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Block 5: Export -->
+        <section class="block block-export-row" id="block-export">
+            <button id="btn-export" class="btn-export" disabled>Скачать CSV</button>
+            <span class="export-hint" id="export-hint"></span>
+        </section>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

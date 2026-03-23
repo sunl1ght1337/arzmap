@@ -153,6 +153,18 @@ function buildOwnerStats(houses, businesses) {
 function applyFilters(houses, ownerStats, filters) {
     const nickLower = filters.nick ? filters.nick.toLowerCase() : '';
 
+    // Pre-compute house count per owner within the ID range
+    // so that minHouses/maxHouses filter against houses in range, not total
+    const rangeHouseCount = {};
+    if (filters.minHouses !== null || filters.maxHouses !== null) {
+        for (const h of houses) {
+            if (!h.owner) continue;
+            if (filters.fromId !== null && h.id !== null && h.id < filters.fromId) continue;
+            if (filters.toId   !== null && h.id !== null && h.id > filters.toId)   continue;
+            rangeHouseCount[h.owner] = (rangeHouseCount[h.owner] ?? 0) + 1;
+        }
+    }
+
     return houses.filter(h => {
         // ── ID range ──────────────────────────────────────────────────
         if (filters.fromId !== null && h.id !== null && h.id < filters.fromId) return false;
@@ -164,16 +176,16 @@ function applyFilters(houses, ownerStats, filters) {
 
         // ── Owner-dependent filters ───────────────────────────────────
         if (h.owner) {
-            const s = ownerStats[h.owner] ?? { houseCount: 0, businessCount: 0 };
+            const inRange = rangeHouseCount[h.owner] ?? 0;
+            const s = ownerStats[h.owner] ?? { businessCount: 0 };
 
-            if (filters.minHouses !== null && s.houseCount < filters.minHouses) return false;
-            if (filters.maxHouses !== null && s.houseCount > filters.maxHouses) return false;
-            if (filters.minBiz    !== null && s.businessCount < filters.minBiz)  return false;
-            if (filters.maxBiz    !== null && s.businessCount > filters.maxBiz)  return false;
+            if (filters.minHouses !== null && inRange < filters.minHouses) return false;
+            if (filters.maxHouses !== null && inRange > filters.maxHouses) return false;
+            if (filters.minBiz    !== null && s.businessCount < filters.minBiz) return false;
+            if (filters.maxBiz    !== null && s.businessCount > filters.maxBiz) return false;
 
             if (nickLower && !h.owner.toLowerCase().includes(nickLower)) return false;
         } else {
-            // House has no owner → skip if any owner-specific filter is active
             const ownerFiltersActive =
                 filters.minHouses !== null || filters.maxHouses !== null ||
                 filters.minBiz    !== null || filters.maxBiz    !== null ||

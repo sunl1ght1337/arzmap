@@ -12,6 +12,7 @@ const state = {
     businesses: [],
     ownerStats: {},
     filteredResults: [],
+    currentFilters: null,
     loaded: false,
 };
 
@@ -144,80 +145,147 @@ function buildOwnerStats(houses, businesses) {
 // Filtering
 // ---------------------------------------------------------------------------
 
-/**
- * @param {Object[]} houses        - normalised houses array
- * @param {Object}   ownerStats    - built by buildOwnerStats()
- * @param {Object}   filters       - values from UI
- * @returns {Object[]} filtered houses (not yet enriched with stats)
- */
-function applyFilters(houses, ownerStats, filters) {
-    const nickLower = filters.nick ? filters.nick.toLowerCase() : '';
+const EMPTY_OWNER_STATS = { houseIds: [], houseCount: 0, businessIds: [], businessCount: 0 };
 
-    // Pre-compute house count per owner within the ID range
-    // so that minHouses/maxHouses filter against houses in range, not total
-    const rangeHouseCount = {};
-    if (filters.minHouses !== null || filters.maxHouses !== null) {
-        for (const h of houses) {
-            if (!h.owner) continue;
-            if (filters.fromId !== null && h.id !== null && h.id < filters.fromId) continue;
-            if (filters.toId   !== null && h.id !== null && h.id > filters.toId)   continue;
-            rangeHouseCount[h.owner] = (rangeHouseCount[h.owner] ?? 0) + 1;
-        }
+function isBusinessResultMode(mode) {
+    return mode === 'businesses-with-houses' || mode === 'businesses-without-houses';
+}
+
+function hasHouseIdRange(filters) {
+    return filters.fromId !== null || filters.toId !== null;
+}
+
+function hasBusinessIdRange(filters) {
+    return filters.fromBizId !== null || filters.toBizId !== null;
+}
+
+function houseIdInRange(id, filters) {
+    if (id === null || id === undefined) return false;
+    if (filters.fromId !== null && id < filters.fromId) return false;
+    if (filters.toId   !== null && id > filters.toId)   return false;
+    return true;
+}
+
+function businessIdInRange(id, filters) {
+    if (id === null || id === undefined) return false;
+    if (filters.fromBizId !== null && id < filters.fromBizId) return false;
+    if (filters.toBizId   !== null && id > filters.toBizId)   return false;
+    return true;
+}
+
+function buildRangeOwnerStats(ownerStats, filters) {
+    const statsByOwner = {};
+    const houseRangeActive = hasHouseIdRange(filters);
+    const businessRangeActive = hasBusinessIdRange(filters);
+
+    for (const [owner, stats] of Object.entries(ownerStats)) {
+        const houseIds = houseRangeActive
+            ? stats.houseIds.filter(id => houseIdInRange(id, filters))
+            : stats.houseIds;
+        const businessIds = businessRangeActive
+            ? stats.businessIds.filter(id => businessIdInRange(id, filters))
+            : stats.businessIds;
+
+        statsByOwner[owner] = {
+            houseIds,
+            houseCount: houseIds.length,
+            businessIds,
+            businessCount: businessIds.length,
+        };
     }
 
-    return houses.filter(h => {
-        // ── ID range ──────────────────────────────────────────────────
-        if (filters.fromId !== null && h.id !== null && h.id < filters.fromId) return false;
-        if (filters.toId   !== null && h.id !== null && h.id > filters.toId)   return false;
+    return statsByOwner;
+}
 
-        // ── Owner presence ────────────────────────────────────────────
-        if (filters.ownerMode === 'with'    && !h.owner) return false;
-        if (filters.ownerMode === 'without' &&  h.owner) return false;
+function matchesResultMode(item, filters, rangeStats) {
+    switch (filters.resultMode) {
+        case 'houses-with-businesses':
+            return Boolean(item.owner) && rangeStats.businessCount > 0;
+        case 'houses-without-businesses':
+            return !item.owner || rangeStats.businessCount === 0;
+        case 'businesses-with-houses':
+            return Boolean(item.owner) && rangeStats.houseCount > 0;
+        case 'businesses-without-houses':
+            return !item.owner || rangeStats.houseCount === 0;
+        case 'houses-all':
+        default:
+            return true;
+    }
+}
 
-        // ── Owner-dependent filters ───────────────────────────────────
-        if (h.owner) {
-            const inRange = rangeHouseCount[h.owner] ?? 0;
-            const s = ownerStats[h.owner] ?? { businessCount: 0 };
+function matchesPrimaryIdRange(item, filters) {
+    return isBusinessResultMode(filters.resultMode)
+        ? businessIdInRange(item.id, filters) || !hasBusinessIdRange(filters)
+        : houseIdInRange(item.id, filters) || !hasHouseIdRange(filters);
+}
 
-            if (filters.minHouses !== null && inRange < filters.minHouses) return false;
-            if (filters.maxHouses !== null && inRange > filters.maxHouses) return false;
-            if (filters.minBiz    !== null && s.businessCount < filters.minBiz) return false;
-            if (filters.maxBiz    !== null && s.businessCount > filters.maxBiz) return false;
+function hasOwnerDependentFilters(filters) {
+    return (
+        filters.minHouses !== null || filters.maxHouses !== null ||
+        filters.minBiz    !== null || filters.maxBiz    !== null ||
+        Boolean(filters.nick)
+    );
+}
 
-            if (nickLower && !h.owner.toLowerCase().includes(nickLower)) return false;
-        } else {
-            const ownerFiltersActive =
-                filters.minHouses !== null || filters.maxHouses !== null ||
-                filters.minBiz    !== null || filters.maxBiz    !== null ||
-                nickLower;
-            if (ownerFiltersActive) return false;
+/**
+ * @param {Object[]} houses        - normalised houses array
+ * @param {Object[]} businesses    - normalised businesses array
+ * @param {Object}   ownerStats    - built by buildOwnerStats()
+ * @param {Object}   filters       - values from UI
+ * @returns {Object[]} filtered items (houses or businesses, not yet enriched)
+ */
+function applyFilters(houses, businesses, ownerStats, filters) {
+    const nickLower = filters.nick ? filters.nick.toLowerCase() : '';
+    const source = isBusinessResultMode(filters.resultMode) ? businesses : houses;
+    const rangeOwnerStats = buildRangeOwnerStats(ownerStats, filters);
+
+    return source.filter(item => {
+        if (!matchesPrimaryIdRange(item, filters)) return false;
+
+        if (filters.ownerMode === 'with'    && !item.owner) return false;
+        if (filters.ownerMode === 'without' &&  item.owner) return false;
+
+        const rangeStats = item.owner ? (rangeOwnerStats[item.owner] ?? EMPTY_OWNER_STATS) : EMPTY_OWNER_STATS;
+        if (!matchesResultMode(item, filters, rangeStats)) return false;
+
+        if (item.owner) {
+            if (filters.minHouses !== null && rangeStats.houseCount < filters.minHouses) return false;
+            if (filters.maxHouses !== null && rangeStats.houseCount > filters.maxHouses) return false;
+            if (filters.minBiz    !== null && rangeStats.businessCount < filters.minBiz) return false;
+            if (filters.maxBiz    !== null && rangeStats.businessCount > filters.maxBiz) return false;
+
+            if (nickLower && !item.owner.toLowerCase().includes(nickLower)) return false;
+        } else if (hasOwnerDependentFilters(filters)) {
+            return false;
         }
 
         return true;
     });
 }
 
-/** Attach owner stats fields to each house row (for table display / CSV).
- *  houseCount/houseIds reflect only the houses present in the filtered list.
- *  businessCount/businessIds reflect total on the server (ownerStats). */
-function enrichResults(houses, ownerStats) {
-    // Build house counts scoped to the current filtered list
-    const rangeIds   = {};
-    for (const h of houses) {
-        if (!h.owner) continue;
-        if (!rangeIds[h.owner]) rangeIds[h.owner] = [];
-        rangeIds[h.owner].push(h.id);
+/** Attach owner stats fields to each row (for table display / CSV). */
+function enrichResults(items, ownerStats, filters) {
+    const primaryIdsByOwner = {};
+    const isBusinessMode = isBusinessResultMode(filters.resultMode);
+    const rangeOwnerStats = buildRangeOwnerStats(ownerStats, filters);
+
+    for (const item of items) {
+        if (!item.owner) continue;
+        if (!primaryIdsByOwner[item.owner]) primaryIdsByOwner[item.owner] = [];
+        primaryIdsByOwner[item.owner].push(item.id);
     }
 
-    return houses.map(h => {
-        const s = h.owner ? (ownerStats[h.owner] ?? null) : null;
-        const ids = h.owner ? (rangeIds[h.owner] ?? []) : [];
+    return items.map(item => {
+        const s = item.owner ? (ownerStats[item.owner] ?? null) : null;
+        const rangeStats = item.owner ? (rangeOwnerStats[item.owner] ?? EMPTY_OWNER_STATS) : EMPTY_OWNER_STATS;
+        const primaryIds = item.owner ? (primaryIdsByOwner[item.owner] ?? []) : [];
         return {
-            ...h,
-            houseCount:    ids.length,
-            houseIds:      ids,
-            businessCount: s ? s.businessCount : 0,
-            businessIds:   s ? s.businessIds   : [],
+            ...item,
+            resultType: isBusinessMode ? 'business' : 'house',
+            houseCount: s ? (isBusinessMode ? rangeStats.houseCount : primaryIds.length) : 0,
+            houseIds:   s ? (isBusinessMode ? rangeStats.houseIds   : primaryIds) : [],
+            businessCount: s ? (isBusinessMode ? primaryIds.length : rangeStats.businessCount) : 0,
+            businessIds:   s ? (isBusinessMode ? primaryIds        : rangeStats.businessIds) : [],
         };
     });
 }
@@ -225,6 +293,17 @@ function enrichResults(houses, ownerStats) {
 // ---------------------------------------------------------------------------
 // Sorting
 // ---------------------------------------------------------------------------
+function idsSortValue(ids, dir) {
+    const numericIds = ids.filter(id => id !== null && id !== undefined);
+    if (!numericIds.length) {
+        return dir === 'asc' ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY;
+    }
+
+    return dir === 'asc'
+        ? Math.min(...numericIds)
+        : Math.max(...numericIds);
+}
+
 function sortResults(results, { field, dir }) {
     const mul = dir === 'asc' ? 1 : -1;
     return [...results].sort((a, b) => {
@@ -238,8 +317,12 @@ function sortResults(results, { field, dir }) {
             }
             case 'houseCount':
                 return mul * (a.houseCount - b.houseCount);
+            case 'houseIds':
+                return mul * (idsSortValue(a.houseIds, dir) - idsSortValue(b.houseIds, dir));
             case 'businessCount':
                 return mul * (a.businessCount - b.businessCount);
+            case 'businessIds':
+                return mul * (idsSortValue(a.businessIds, dir) - idsSortValue(b.businessIds, dir));
             default:
                 return 0;
         }
@@ -249,13 +332,15 @@ function sortResults(results, { field, dir }) {
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
-function renderTable(results) {
+function renderTable(results, filters) {
     const container = document.getElementById('table-container');
 
     if (!results.length) {
         container.innerHTML = '<p class="placeholder">Ничего не найдено. Попробуйте изменить фильтры.</p>';
         return;
     }
+
+    const idHeader = isBusinessResultMode(filters.resultMode) ? 'ID бизнеса' : 'ID дома';
 
     const rows = results.map(r => {
         const hIds = r.houseIds.length    ? r.houseIds.join(', ')    : '—';
@@ -288,7 +373,7 @@ function renderTable(results) {
         <table>
             <thead>
                 <tr>
-                    <th>ID дома</th>
+                    <th>${idHeader}</th>
                     <th>Владелец</th>
                     <th>Домов</th>
                     <th>ID домов владельца</th>
@@ -312,9 +397,10 @@ function esc(str) {
 // ---------------------------------------------------------------------------
 // CSV Export
 // ---------------------------------------------------------------------------
-function exportCsv(results, serverId) {
+function exportCsv(results, serverId, filters) {
+    const isBusinessMode = isBusinessResultMode(filters.resultMode);
     const HEADERS = [
-        'ID дома', 'Владелец',
+        isBusinessMode ? 'ID бизнеса' : 'ID дома', 'Владелец',
         'Кол-во домов', 'ID домов',
         'Кол-во бизнесов', 'ID бизнесов',
         'Название',
@@ -341,7 +427,8 @@ function exportCsv(results, serverId) {
     const dateStr =
         `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}` +
         `_${pad(now.getHours())}-${pad(now.getMinutes())}`;
-    const filename = `houses_server_${serverId}_${dateStr}.csv`;
+    const kind = isBusinessMode ? 'businesses' : 'houses';
+    const filename = `${kind}_server_${serverId}_${dateStr}.csv`;
 
     // BOM for correct Cyrillic rendering in Excel
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -373,11 +460,15 @@ function updateSummary(totalHouses, totalBiz, results) {
 function readFilters() {
     const int = (id) => {
         const v = document.getElementById(id).value.trim();
-        return v === '' ? null : parseInt(v, 10);
+        const n = parseInt(v, 10);
+        return v === '' || Number.isNaN(n) ? null : n;
     };
     return {
+        resultMode: document.getElementById('filter-result-mode').value,
         fromId:    int('filter-from-id'),
         toId:      int('filter-to-id'),
+        fromBizId: int('filter-from-biz-id'),
+        toBizId:   int('filter-to-biz-id'),
         ownerMode: document.getElementById('filter-owner').value,
         minHouses: int('filter-min-houses'),
         maxHouses: int('filter-max-houses'),
@@ -403,14 +494,15 @@ function runFiltersAndRender() {
     const filters    = readFilters();
     const sortConfig = readSortConfig();
 
-    const filtered  = applyFilters(state.houses, state.ownerStats, filters);
-    const enriched  = enrichResults(filtered, state.ownerStats);
+    const filtered  = applyFilters(state.houses, state.businesses, state.ownerStats, filters);
+    const enriched  = enrichResults(filtered, state.ownerStats, filters);
     const sorted    = sortResults(enriched, sortConfig);
 
     state.filteredResults = sorted;
+    state.currentFilters = filters;
 
     updateSummary(state.houses.length, state.businesses.length, sorted);
-    renderTable(sorted);
+    renderTable(sorted, filters);
 
     const exportBtn  = document.getElementById('btn-export');
     const exportHint = document.getElementById('export-hint');
@@ -489,12 +581,14 @@ async function handleLoad() {
 
 function handleReset() {
     ['filter-from-id', 'filter-to-id',
+     'filter-from-biz-id', 'filter-to-biz-id',
      'filter-min-houses', 'filter-max-houses',
      'filter-min-biz', 'filter-max-biz',
      'filter-nick'].forEach(id => {
         document.getElementById(id).value = '';
     });
     document.getElementById('filter-owner').value = 'all';
+    document.getElementById('filter-result-mode').value = 'houses-all';
     document.getElementById('sort-field').value   = 'id';
     document.getElementById('sort-dir').value     = 'asc';
     runFiltersAndRender();
@@ -503,7 +597,7 @@ function handleReset() {
 function handleExport() {
     if (!state.filteredResults.length) return;
     try {
-        exportCsv(state.filteredResults, state.serverId);
+        exportCsv(state.filteredResults, state.serverId, state.currentFilters ?? readFilters());
     } catch (err) {
         alert('Ошибка при создании CSV-файла: ' + err.message);
     }

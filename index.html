@@ -28,11 +28,31 @@
             <h2 class="block-title">Фильтры</h2>
             <div class="filters-grid">
                 <div class="filter-group">
+                    <label class="filter-label">Режим результатов</label>
+                    <select id="filter-result-mode">
+                        <option value="houses-all">Все дома</option>
+                        <option value="houses-with-businesses">Дома + бизнесы</option>
+                        <option value="houses-without-businesses">Дома без бизнесов</option>
+                        <option value="businesses-with-houses">Бизнесы с домами</option>
+                        <option value="businesses-without-houses">Бизнесы без домов</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
                     <label class="filter-label">Диапазон ID домов</label>
                     <div class="input-row">
                         <input type="number" id="filter-from-id" placeholder="От" min="1">
                         <span class="separator">—</span>
                         <input type="number" id="filter-to-id" placeholder="До" min="1">
+                    </div>
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label">Диапазон ID бизнесов</label>
+                    <div class="input-row">
+                        <input type="number" id="filter-from-biz-id" placeholder="От" min="1">
+                        <span class="separator">—</span>
+                        <input type="number" id="filter-to-biz-id" placeholder="До" min="1">
                     </div>
                 </div>
 
@@ -72,10 +92,12 @@
                     <label class="filter-label">Сортировка</label>
                     <div class="input-row">
                         <select id="sort-field">
-                            <option value="id">По ID дома</option>
+                            <option value="id">По ID объекта</option>
                             <option value="owner">По нику</option>
+                            <option value="houseIds">По ID домов</option>
                             <option value="houseCount">По кол-ву домов</option>
                             <option value="businessCount">По кол-ву бизнесов</option>
+                            <option value="businessIds">По ID бизнесов</option>
                         </select>
                         <select id="sort-dir">
                             <option value="asc">↑ Возр.</option>
